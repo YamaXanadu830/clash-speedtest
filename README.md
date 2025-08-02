@@ -2,7 +2,8 @@
 
 基于 Clash/Mihomo 核心的测速工具，快速测试你的节点速度。
 
-Features:
+## 特性
+
 1. 无需额外的配置，直接将 Clash/Mihomo 配置本地文件路径或者订阅地址作为参数传入即可
 2. 支持 Proxies 和 Proxy Provider 中定义的全部类型代理节点，兼容性跟 Mihomo 一致
 3. 不依赖额外的 Clash/Mihomo 进程实例，单一工具即可完成测试
@@ -10,11 +11,33 @@ Features:
 
 <img width="1332" alt="image" src="https://github.com/user-attachments/assets/fdc47ec5-b626-45a3-a38a-6d88c326c588">
 
+## 项目结构
+
+```
+clash-speedtest-fork/
+├── main.go                   # 主程序入口
+├── speedtester/              # 核心测速引擎
+│   ├── speedtester.go        # 测速逻辑
+│   └── zeroreader.go         # 上传数据生成器
+└── download-server/          # 自建测速服务器
+    └── download-server.go    # 服务器代码
+```
+
+## 功能实现
+
+### 测试流程
+1. **延迟测试** - 6次ping，统计平均延迟、抖动、丢包率
+2. **下载测试** - 多线程并发下载，计算下载速度
+3. **上传测试** - 并发上传，计算上传速度
+
+### 支持协议
+Shadowsocks/ShadowsocksR、VMess/VLess、Trojan、Hysteria/Hysteria2、WireGuard、Tuic、SSH等
+
 ## 使用方法
 
 ```bash
 # 支持从源码安装，或从 Release 里下载由 Github Action 自动构建的二进制文件
-> go install github.com/faceair/clash-speedtest@latest
+> go install github.com/YamaXanadu830/clash-speedtest@latest
 
 # 查看帮助
 > clash-speedtest -h
@@ -91,6 +114,44 @@ Premium|广港|IEPL|05                        	3.87MB/s    	249.00ms
 4.      🇭🇰 香港 HK-19           Trojan          649ms
 5.      🇭🇰 香港 HK-12           Trojan          667ms
 
+# 7. 连接稳定性监控模式
+> clash-speedtest -c config.yaml --monitor --monitor-duration 24h
+# 监控节点的连接稳定性，特别适用于需要24小时不间断连接的场景（如交易平台）
+# 功能特点：
+# - 持续监控节点连接状态
+# - 秒级精度的断线检测
+# - 实时显示各节点状态
+# - 生成详细的稳定性报告
+
+# 监控1小时并导出报告
+> clash-speedtest -c config.yaml -f 'HK|SG' --monitor --monitor-duration 1h --output monitor-report.yaml
+
+# 使用WebSocket流式数据监控模式
+> clash-speedtest -c config.yaml --monitor --monitor-type websocket --monitor-duration 1h
+# WebSocket模式连接到Binance实时数据流，监控真正的流式数据连接稳定性
+# 适用于需要24小时不间断数据流的交易应用
+
+监控参数说明：
+  --monitor              启用稳定性监控模式
+  --monitor-duration     监控时长（默认24h）
+  --monitor-interval     心跳检测间隔（默认1s）
+  --monitor-type         监控类型：http或websocket（默认http）
+
+监控输出示例：
+=== 连接稳定性监控 (实时) ===
+运行时间: 01:23:45
+
+节点名称        状态    在线时长    断线次数    稳定率    数据包数    数据量
+🇭🇰 香港 01      ✅      01:23:45    0          100.00%   4985        2.1 MB
+🇸🇬 新加坡 01    ✅      01:23:42    1          99.97%    4968        2.1 MB  
+🇯🇵 日本 01      ❌      01:20:15    3          96.58%    4512        1.9 MB
+
+## WebSocket流式数据监控特性
+- **真实数据流监控**：连接到Binance实时BTC/USDT价格数据流
+- **精确断线检测**：基于数据包接收间隔（>10秒=断线）
+- **详细统计指标**：数据包接收数、总字节数、连接稳定性
+- **24小时监控**：适用于交易平台的长期稳定性测试
+
 ## 测速原理
 
 通过 HTTP GET 请求下载指定大小的文件，默认使用 https://speed.cloudflare.com (50MB) 进行测试，计算下载时间得到下载速度。
@@ -109,7 +170,7 @@ Cloudflare 是全球知名的 CDN 服务商，其提供的测速服务器到海�
 
 ```shell
 # 在您需要进行测速的服务器上安装和启动测速服务器
-> go install github.com/faceair/clash-speedtest/download-server@latest
+> go install github.com/YamaXanadu830/clash-speedtest/download-server@latest
 > download-server
 
 # 此时在本地使用 http://your-server-ip:8080 作为 server-url 即可
@@ -119,3 +180,44 @@ Cloudflare 是全球知名的 CDN 服务商，其提供的测速服务器到海�
 ## License
 
 [GPL-3.0](LICENSE)
+
+## 📝 功能开发任务 (TODO List)
+
+### 连接稳定性监控功能
+
+#### 1. 添加监控模式命令行参数
+- [x] 在 main.go 添加 --monitor 参数（布尔值）
+- [x] 添加 --monitor-duration 参数（默认24h）
+- [x] 添加 --monitor-interval 参数（默认1s）
+- [x] 添加监控模式与速度测试模式的互斥判断
+
+#### 2. 实现监控核心功能
+- [x] 创建 speedtester/monitor.go 文件
+- [x] 实现 MonitorConfig 结构体（包含duration、interval、target）
+- [x] 实现 MonitorResult 结构体（包含稳定率、断线次数、断线明细）
+- [x] 实现 testStability() 方法，使用HTTP Keep-Alive长连接
+- [x] 实现断线检测和自动重连逻辑
+
+#### 3. 添加实时状态显示
+- [x] 实现实时状态输出（类似进度条）
+- [x] 显示：节点名称、连接状态、运行时长、断线次数
+- [x] 每秒刷新显示，使用终端控制符清屏更新
+
+#### 4. 生成监控报告
+- [x] 实现监控数据统计（稳定率计算、最长在线时间等）
+- [x] 添加监控报告输出格式（表格形式）
+- [x] 支持导出监控报告到文件（--output参数复用）
+
+#### 5. 更新文档
+- [x] 在 README.md 添加监控模式使用说明
+- [x] 添加监控模式命令示例
+- [x] 说明监控报告的指标含义
+
+### 使用示例
+```bash
+# 监控所有香港节点24小时稳定性
+clash-speedtest -c config.yaml -f 'HK|香港' --monitor --monitor-duration 24h
+
+# 监控并输出报告
+clash-speedtest -c config.yaml --monitor --monitor-duration 1h --output stability-report.yaml
+```
