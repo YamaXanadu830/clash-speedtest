@@ -1,0 +1,41 @@
+{
+  "name": "clash-speedtest-gui",
+  "outputfilename": "clash-speedtest-gui",
+  "frontend:install": "npm install",
+  "frontend:build": "npm run build",
+  "frontend:dev:watcher": "npm run dev",
+  "frontend:dev:serverUrl": "http://localhost:5173",
+  "author": {
+    "name": "YamaXanadu830",
+    "email": ""
+  },
+  "info": {
+    "productName": "Clash SpeedTest GUI",
+    "productVersion": "1.0.0",
+    "companyName": "YamaXanadu",
+    "copyright": "Copyright © 2025 YamaXanadu. All rights reserved.",
+    "comments": "基于Clash的代理节点测速和监控工具"
+  },
+  "windowStartState": "normal",
+  "onDomReady": false,
+  "startHidden": false,
+  "disableResize": false,
+  "width": 1024,
+  "height": 768,
+  "minWidth": 800,
+  "minHeight": 600,
+  "backgroundColor": "#2D3142",
+  "hideWindowDecorations": false,
+  "singleInstanceLock": false,
+  "frameless": false,
+  "assetdir": "./frontend/dist",
+  "reloaddirs": "./",
+  "build:dir": "./build",
+  "debounceMS": 750,
+  "devServer": "localhost:5173",
+  "includeAssets": [],
+  "nsis": {
+    "languages": ["zh-CN", "en-US"],
+    "customLanguageMessages": {}
+  }
+}

@@ -7,6 +7,7 @@
 - **📊 节点测速** - 测试延迟、下载/上传速度  
 - **🔍 稳定性监控** - 24小时连接监控，支持HTTP和WebSocket模式
 - **📈 流式数据监控** - 连接Binance实时数据流，适用于交易平台
+- **🖥️ 图形界面** - 基于 Wails 的现代化 GUI 界面
 
 ## 📁 项目结构
 
@@ -17,8 +18,12 @@ clash-speedtest-fork/
 │   ├── speedtester.go        # 节点测速逻辑
 │   ├── monitor.go            # 稳定性监控逻辑（NEW）
 │   └── zeroreader.go         # 上传数据生成器
-└── download-server/          # 自建测速服务器
-    └── download-server.go    # HTTP测速服务器
+├── download-server/          # 自建测速服务器
+│   └── download-server.go    # HTTP测速服务器
+└── gui/                      # 图形界面版本
+    ├── main.go              # GUI 主程序
+    ├── app.go               # 应用逻辑
+    └── frontend/            # 前端界面
 ```
 
 ## 📋 支持协议
@@ -49,6 +54,23 @@ clash-speedtest -c config.yaml --monitor --monitor-type websocket --monitor-dura
 # 连接Binance实时BTC/USDT数据流，监控真正的流式数据连接稳定性
 # 特别适用于交易平台、实时数据应用的24小时稳定性测试
 ```
+
+## 🖥️ GUI 图形界面版本
+
+基于 Wails v2 开发的现代化图形界面，提供更直观的操作体验。
+
+### 安装运行
+```bash
+cd gui
+wails build  # 编译
+./build/bin/clash-speedtest-gui  # 运行
+```
+
+### GUI 功能特性
+- **速度测试** - 可视化节点测速，支持批量测试
+- **稳定性监控** - 实时监控节点稳定性，自动计算稳定率
+- **统一配置** - 全局配置面板，避免重复设置
+- **数据可视化** - 测试结果实时展示，支持导出报告
 
 ## 🧪 测试示例
 
@@ -96,6 +118,11 @@ go run main.go -c config.yaml --monitor --monitor-type websocket --monitor-durat
 ### 📡 稳定性监控
 - **HTTP模式**：使用Keep-Alive长连接持续监控节点连接状态
 - **WebSocket模式**：连接Binance实时数据流 `wss://stream.binance.com:9443/ws/btcusdt@ticker`，通过数据包接收间隔检测断线（>10秒无数据=断线）
+
+## 📝 最近更新
+- 🆕 新增 GUI 图形界面版本
+- 🔧 修复监控稳定率计算精度
+- ✨ 支持多种测速服务器选择
 
 ## License
 

@@ -491,7 +491,6 @@ type downloadResult struct {
 func (st *SpeedTester) testDownload(proxy constant.Proxy, size int, timeout time.Duration) *downloadResult {
 	client := st.createClient(proxy, timeout)
 	start := time.Now()
-
 	resp, err := client.Get(fmt.Sprintf("%s/__down?bytes=%d", st.config.ServerURL, size))
 	if err != nil {
 		return nil

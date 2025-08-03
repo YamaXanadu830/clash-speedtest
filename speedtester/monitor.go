@@ -127,85 +127,99 @@ func (s *MonitorSession) Run(statusChan chan<- *MonitorStatus) *MonitorResult {
 
 	var currentDisconnect *DisconnectEvent
 	var maxOnlineTime time.Duration
+	
+	// 立即执行第一次心跳检测
+	firstCheck := true
 
 	for {
-		select {
-		case <-s.ctx.Done():
-			// 监控时间到达
-			s.result.EndTime = time.Now()
-			s.result.TotalDuration = s.result.EndTime.Sub(s.result.StartTime)
-			s.result.MaxOnlineTime = maxOnlineTime
-			s.calculateStability()
-			// 清理WebSocket连接
-			if s.config.Type == "websocket" {
-				s.closeWebSocket()
-			}
-			return s.result
-
-		case <-ticker.C:
-			// 执行心跳检测
-			isAlive, err := s.heartbeat()
-
-			s.mu.Lock()
-			if isAlive {
-				if !s.result.IsAlive {
-					// 从断线恢复或首次连接
-					s.result.IsAlive = true
-					s.currentOnlineStart = time.Now()
-					if currentDisconnect != nil {
-						currentDisconnect.EndTime = time.Now()
-						currentDisconnect.Duration = currentDisconnect.EndTime.Sub(currentDisconnect.StartTime)
-						s.result.DisconnectEvents = append(s.result.DisconnectEvents, *currentDisconnect)
-						currentDisconnect = nil
-					}
-				}
-				// 更新最长在线时间
-				if !s.currentOnlineStart.IsZero() {
-					currentOnlineTime := time.Since(s.currentOnlineStart)
-					if currentOnlineTime > maxOnlineTime {
-						maxOnlineTime = currentOnlineTime
-					}
-				}
-			} else {
-				if s.result.IsAlive {
-					// 新的断线事件
-					s.result.IsAlive = false
-					s.result.DisconnectCount++
-					currentDisconnect = &DisconnectEvent{
-						StartTime: time.Now(),
-						Error:     err.Error(),
-					}
-					// 累计之前的在线时间
-					s.result.OnlineDuration += time.Since(s.currentOnlineStart)
-				}
-			}
-			s.mu.Unlock()
-
-			// 发送状态更新
-			s.mu.Lock()
-			// 计算在线时长（避免死锁）
-			onlineDuration := s.result.OnlineDuration
-			if s.result.IsAlive {
-				onlineDuration += time.Since(s.currentOnlineStart)
-			}
-			status := &MonitorStatus{
-				ProxyName:       s.proxyName,
-				IsAlive:         isAlive,
-				DisconnectCount: s.result.DisconnectCount,
-				OnlineDuration:  onlineDuration,
-				TotalDuration:   time.Since(s.result.StartTime),
-				// WebSocket流式数据统计
-				DataPacketCount: s.dataPacketCount,
-				TotalDataBytes:  s.totalDataBytes,
-				LastPacketTime:  s.lastDataPacketTime,
-			}
-			s.mu.Unlock()
-
+		// 立即执行第一次检测，后续等待ticker
+		if !firstCheck {
 			select {
-			case statusChan <- status:
-			default:
-				// 状态发送被跳过（防阻塞）
+			case <-s.ctx.Done():
+				// 监控时间到达
+				s.result.EndTime = time.Now()
+				s.result.TotalDuration = s.result.EndTime.Sub(s.result.StartTime)
+				s.result.MaxOnlineTime = maxOnlineTime
+				s.calculateStability()
+				// 清理WebSocket连接
+				if s.config.Type == "websocket" {
+					s.closeWebSocket()
+				}
+				return s.result
+
+			case <-ticker.C:
+				// 继续执行下面的心跳检测
 			}
+		}
+		
+		// 执行心跳检测
+		isAlive, err := s.heartbeat()
+		firstCheck = false
+
+		s.mu.Lock()
+		if isAlive {
+			if !s.result.IsAlive {
+				// 从断线恢复或首次连接
+				s.result.IsAlive = true
+				// 如果是第一次连接成功，使用监控开始时间
+				if len(s.result.DisconnectEvents) == 0 && s.result.DisconnectCount == 0 {
+					s.currentOnlineStart = s.result.StartTime
+				} else {
+					s.currentOnlineStart = time.Now()
+				}
+				if currentDisconnect != nil {
+					currentDisconnect.EndTime = time.Now()
+					currentDisconnect.Duration = currentDisconnect.EndTime.Sub(currentDisconnect.StartTime)
+					s.result.DisconnectEvents = append(s.result.DisconnectEvents, *currentDisconnect)
+					currentDisconnect = nil
+				}
+			}
+			// 更新最长在线时间
+			if !s.currentOnlineStart.IsZero() {
+				currentOnlineTime := time.Since(s.currentOnlineStart)
+				if currentOnlineTime > maxOnlineTime {
+					maxOnlineTime = currentOnlineTime
+				}
+			}
+		} else {
+			if s.result.IsAlive {
+				// 新的断线事件
+				s.result.IsAlive = false
+				s.result.DisconnectCount++
+				currentDisconnect = &DisconnectEvent{
+					StartTime: time.Now(),
+					Error:     err.Error(),
+				}
+				// 累计之前的在线时间
+				s.result.OnlineDuration += time.Since(s.currentOnlineStart)
+			}
+		}
+		s.mu.Unlock()
+
+		// 发送状态更新
+		s.mu.Lock()
+		// 计算在线时长（避免死锁）
+		onlineDuration := s.result.OnlineDuration
+		if s.result.IsAlive {
+			onlineDuration += time.Since(s.currentOnlineStart)
+		}
+		status := &MonitorStatus{
+			ProxyName:       s.proxyName,
+			IsAlive:         isAlive,
+			DisconnectCount: s.result.DisconnectCount,
+			OnlineDuration:  onlineDuration,
+			TotalDuration:   time.Since(s.result.StartTime),
+			// WebSocket流式数据统计
+			DataPacketCount: s.dataPacketCount,
+			TotalDataBytes:  s.totalDataBytes,
+			LastPacketTime:  s.lastDataPacketTime,
+		}
+		s.mu.Unlock()
+
+		select {
+		case statusChan <- status:
+		default:
+			// 状态发送被跳过（防阻塞）
 		}
 	}
 }

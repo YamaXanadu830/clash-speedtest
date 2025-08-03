@@ -1,3 +1,10 @@
 .vscode
 *.exe
 clash-speedtest
+
+# GUI 相关忽略文件
+gui/clash-speedtest-gui
+gui/build/bin/
+gui/frontend/node_modules/
+gui/frontend/dist/
+gui/frontend/.vite/
