@@ -8,8 +8,6 @@
 - **🔍 稳定性监控** - 24小时连接监控，支持HTTP和WebSocket模式
 - **📈 流式数据监控** - 连接Binance实时数据流，适用于交易平台
 
-<img width="1332" alt="image" src="https://github.com/user-attachments/assets/fdc47ec5-b626-45a3-a38a-6d88c326c588">
-
 ## 📁 项目结构
 
 ```
@@ -29,8 +27,13 @@ Shadowsocks、VMess、Trojan、Hysteria、WireGuard、Tuic等
 ## 💻 安装使用
 
 ```bash
-# 安装
+# 方式1：直接安装
 go install github.com/YamaXanadu830/clash-speedtest@latest
+
+# 方式2：本地编译
+git clone https://github.com/YamaXanadu830/clash-speedtest.git
+cd clash-speedtest
+go build -o clash-speedtest
 
 # 🚀 基础测速
 clash-speedtest -c config.yaml                    # 测试所有节点
@@ -45,6 +48,19 @@ clash-speedtest -c config.yaml --monitor --monitor-type websocket --monitor-dura
 > clash-speedtest -c config.yaml --monitor --monitor-type websocket --monitor-duration 1h
 # 连接Binance实时BTC/USDT数据流，监控真正的流式数据连接稳定性
 # 特别适用于交易平台、实时数据应用的24小时稳定性测试
+```
+
+## 🧪 测试示例
+
+```bash
+# 香港节点10分钟WebSocket监控测试
+./clash-speedtest -c config.yaml --monitor --monitor-type websocket --monitor-duration 10m -f "香港"
+
+# 带报告输出
+./clash-speedtest -c config.yaml --monitor --monitor-type websocket --monitor-duration 10m -f "香港" --output hk_report.yaml
+
+# 备选方案
+go run main.go -c config.yaml --monitor --monitor-type websocket --monitor-duration 10m -f "🇭🇰|香港"
 
 ## 📋 监控参数说明
 ```bash

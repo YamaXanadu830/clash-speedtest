@@ -35,10 +35,10 @@ var (
 	renameNodes       = flag.Bool("rename", false, "rename nodes with IP location and speed")
 	fastMode          = flag.Bool("fast", false, "fast mode, only test latency")
 	// 监控模式参数
-	monitorMode       = flag.Bool("monitor", false, "enable stability monitoring mode")
-	monitorDuration   = flag.Duration("monitor-duration", 24*time.Hour, "monitoring duration (default: 24h)")
-	monitorInterval   = flag.Duration("monitor-interval", time.Second, "heartbeat interval for monitoring (default: 1s)")
-	monitorType       = flag.String("monitor-type", "http", "monitoring type: http or websocket (default: http)")
+	monitorMode     = flag.Bool("monitor", false, "enable stability monitoring mode")
+	monitorDuration = flag.Duration("monitor-duration", 24*time.Hour, "monitoring duration (default: 24h)")
+	monitorInterval = flag.Duration("monitor-interval", time.Second, "heartbeat interval for monitoring (default: 1s)")
+	monitorType     = flag.String("monitor-type", "http", "monitoring type: http or websocket (default: http)")
 )
 
 const (
@@ -93,7 +93,7 @@ func main() {
 		fmt.Printf("监控类型: %s\n", *monitorType)
 		fmt.Printf("监控时长: %v | 心跳间隔: %v\n", *monitorDuration, *monitorInterval)
 		fmt.Printf("监控节点数: %d\n\n", len(allProxies))
-		
+
 		// 创建监控配置
 		monitorConfig := &speedtester.MonitorConfig{
 			Duration:  *monitorDuration,
@@ -101,25 +101,25 @@ func main() {
 			TargetURL: "https://cn.tradingview.com/chart/",
 			Type:      *monitorType,
 		}
-		
+
 		// 执行监控
 		startTime := time.Now()
 		lastUpdate := time.Now()
 		statusMap := make(map[string]*speedtester.MonitorStatus)
-		
+
 		results := speedTester.MonitorProxies(allProxies, monitorConfig, func(status *speedtester.MonitorStatus) {
 			statusMap[status.ProxyName] = status
-			
+
 			// 每秒更新一次显示
 			if time.Since(lastUpdate) >= time.Second {
 				lastUpdate = time.Now()
 				printMonitorStatus(statusMap, startTime)
 			}
 		})
-		
+
 		// 打印最终报告
 		printMonitorReport(results)
-		
+
 		// 保存报告
 		if *outputPath != "" {
 			err = saveMonitorReport(results, *outputPath)
@@ -389,10 +389,10 @@ func generateNodeName(countryCode string, downloadSpeed float64) string {
 func printMonitorStatus(statusMap map[string]*speedtester.MonitorStatus, startTime time.Time) {
 	// 清屏
 	fmt.Print("\033[H\033[2J")
-	
+
 	fmt.Println("=== 连接稳定性监控 (实时) ===")
 	fmt.Printf("运行时间: %v\n\n", time.Since(startTime).Round(time.Second))
-	
+
 	table := tablewriter.NewWriter(os.Stdout)
 	table.SetHeader([]string{"节点名称", "状态", "在线时长", "断线次数", "稳定率", "数据包数", "数据量"})
 	table.SetAutoWrapText(false)
@@ -405,30 +405,30 @@ func printMonitorStatus(statusMap map[string]*speedtester.MonitorStatus, startTi
 	table.SetHeaderLine(false)
 	table.SetBorder(false)
 	table.SetTablePadding("\t")
-	
+
 	// 按节点名称排序
 	var names []string
 	for name := range statusMap {
 		names = append(names, name)
 	}
 	sort.Strings(names)
-	
+
 	for _, name := range names {
 		status := statusMap[name]
-		
+
 		statusIcon := "✅"
 		if !status.IsAlive {
 			statusIcon = "❌"
 		}
-		
+
 		stabilityRate := float64(0)
 		if status.TotalDuration > 0 {
 			stabilityRate = float64(status.OnlineDuration) / float64(status.TotalDuration) * 100
 		}
-		
+
 		// 格式化数据量显示
 		dataSize := formatDataSize(status.TotalDataBytes)
-		
+
 		row := []string{
 			name,
 			statusIcon,
@@ -438,41 +438,41 @@ func printMonitorStatus(statusMap map[string]*speedtester.MonitorStatus, startTi
 			fmt.Sprintf("%d", status.DataPacketCount),
 			dataSize,
 		}
-		
+
 		table.Append(row)
 	}
-	
+
 	table.Render()
 }
 
 // printMonitorReport 打印监控最终报告
 func printMonitorReport(results []*speedtester.MonitorResult) {
 	fmt.Println("\n=== 监控报告 ===")
-	
+
 	if len(results) == 0 {
 		fmt.Println("没有监控数据")
 		return
 	}
-	
-	fmt.Printf("监控时间: %s - %s\n\n", 
+
+	fmt.Printf("监控时间: %s - %s\n\n",
 		results[0].StartTime.Format("2006-01-02 15:04:05"),
 		results[0].EndTime.Format("2006-01-02 15:04:05"))
-	
+
 	// 按稳定率排序
 	sort.Slice(results, func(i, j int) bool {
 		return results[i].StabilityRate > results[j].StabilityRate
 	})
-	
+
 	table := tablewriter.NewWriter(os.Stdout)
 	table.SetHeader([]string{"排名", "节点名称", "类型", "稳定率", "断线次数", "最长在线", "断线明细"})
 	table.SetAutoWrapText(false)
 	table.SetAutoFormatHeaders(true)
 	table.SetHeaderAlignment(tablewriter.ALIGN_LEFT)
 	table.SetAlignment(tablewriter.ALIGN_LEFT)
-	
+
 	for i, result := range results {
 		rank := fmt.Sprintf("%d", i+1)
-		
+
 		// 稳定率着色
 		stabilityStr := result.FormatStabilityRate()
 		if result.StabilityRate >= 99.9 {
@@ -482,14 +482,14 @@ func printMonitorReport(results []*speedtester.MonitorResult) {
 		} else {
 			stabilityStr = colorRed + stabilityStr + colorReset
 		}
-		
+
 		// 断线明细
 		var disconnectDetails string
 		if len(result.DisconnectEvents) > 0 {
 			var details []string
 			for _, event := range result.DisconnectEvents {
-				details = append(details, fmt.Sprintf("%s(%v)", 
-					event.StartTime.Format("15:04:05"), 
+				details = append(details, fmt.Sprintf("%s(%v)",
+					event.StartTime.Format("15:04:05"),
 					event.Duration.Round(time.Second)))
 			}
 			disconnectDetails = strings.Join(details, ", ")
@@ -499,7 +499,7 @@ func printMonitorReport(results []*speedtester.MonitorResult) {
 		} else {
 			disconnectDetails = "-"
 		}
-		
+
 		row := []string{
 			rank,
 			result.ProxyName,
@@ -509,10 +509,10 @@ func printMonitorReport(results []*speedtester.MonitorResult) {
 			formatDuration(result.MaxOnlineTime),
 			disconnectDetails,
 		}
-		
+
 		table.Append(row)
 	}
-	
+
 	table.Render()
 }
 
@@ -520,34 +520,34 @@ func printMonitorReport(results []*speedtester.MonitorResult) {
 func saveMonitorReport(results []*speedtester.MonitorResult, outputPath string) error {
 	// 转换为YAML格式
 	type MonitorReportItem struct {
-		Name          string    `yaml:"name"`
-		Type          string    `yaml:"type"`
-		StabilityRate float64   `yaml:"stability_rate"`
+		Name            string  `yaml:"name"`
+		Type            string  `yaml:"type"`
+		StabilityRate   float64 `yaml:"stability_rate"`
 		DisconnectCount int     `yaml:"disconnect_count"`
-		MaxOnlineTime string    `yaml:"max_online_time"`
-		StartTime     string    `yaml:"start_time"`
-		EndTime       string    `yaml:"end_time"`
+		MaxOnlineTime   string  `yaml:"max_online_time"`
+		StartTime       string  `yaml:"start_time"`
+		EndTime         string  `yaml:"end_time"`
 	}
-	
+
 	var report []MonitorReportItem
 	for _, result := range results {
 		item := MonitorReportItem{
-			Name:          result.ProxyName,
-			Type:          result.ProxyType,
-			StabilityRate: result.StabilityRate,
+			Name:            result.ProxyName,
+			Type:            result.ProxyType,
+			StabilityRate:   result.StabilityRate,
 			DisconnectCount: result.DisconnectCount,
-			MaxOnlineTime: formatDuration(result.MaxOnlineTime),
-			StartTime:     result.StartTime.Format("2006-01-02 15:04:05"),
-			EndTime:       result.EndTime.Format("2006-01-02 15:04:05"),
+			MaxOnlineTime:   formatDuration(result.MaxOnlineTime),
+			StartTime:       result.StartTime.Format("2006-01-02 15:04:05"),
+			EndTime:         result.EndTime.Format("2006-01-02 15:04:05"),
 		}
 		report = append(report, item)
 	}
-	
+
 	data, err := yaml.Marshal(report)
 	if err != nil {
 		return err
 	}
-	
+
 	return os.WriteFile(outputPath, data, 0644)
 }
 
@@ -564,18 +564,18 @@ func formatDataSize(bytes int64) string {
 	if bytes == 0 {
 		return "0 B"
 	}
-	
+
 	const unit = 1024
 	if bytes < unit {
 		return fmt.Sprintf("%d B", bytes)
 	}
-	
+
 	div, exp := int64(unit), 0
 	for n := bytes / unit; n >= unit; n /= unit {
 		div *= unit
 		exp++
 	}
-	
+
 	sizes := []string{"KB", "MB", "GB", "TB"}
 	return fmt.Sprintf("%.1f %s", float64(bytes)/float64(div), sizes[exp])
 }

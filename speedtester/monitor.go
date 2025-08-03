@@ -22,17 +22,17 @@ type MonitorConfig struct {
 
 // MonitorResult 监控结果
 type MonitorResult struct {
-	ProxyName        string          // 代理名称
-	ProxyType        string          // 代理类型
-	StartTime        time.Time       // 开始时间
-	EndTime          time.Time       // 结束时间
-	TotalDuration    time.Duration   // 总监控时长
-	OnlineDuration   time.Duration   // 在线时长
-	DisconnectCount  int             // 断线次数
+	ProxyName        string            // 代理名称
+	ProxyType        string            // 代理类型
+	StartTime        time.Time         // 开始时间
+	EndTime          time.Time         // 结束时间
+	TotalDuration    time.Duration     // 总监控时长
+	OnlineDuration   time.Duration     // 在线时长
+	DisconnectCount  int               // 断线次数
 	DisconnectEvents []DisconnectEvent // 断线事件列表
-	StabilityRate    float64         // 稳定率 (在线时长/总时长)
-	MaxOnlineTime    time.Duration   // 最长连续在线时间
-	IsAlive          bool            // 当前是否在线
+	StabilityRate    float64           // 稳定率 (在线时长/总时长)
+	MaxOnlineTime    time.Duration     // 最长连续在线时间
+	IsAlive          bool              // 当前是否在线
 }
 
 // DisconnectEvent 断线事件
@@ -45,19 +45,19 @@ type DisconnectEvent struct {
 
 // MonitorSession 监控会话
 type MonitorSession struct {
-	proxy           constant.Proxy
-	proxyName       string
-	proxyType       string
-	config          *MonitorConfig
-	result          *MonitorResult
-	client          *http.Client
-	ctx             context.Context
-	cancel          context.CancelFunc
-	mu              sync.Mutex
-	lastOnlineTime  time.Time
+	proxy              constant.Proxy
+	proxyName          string
+	proxyType          string
+	config             *MonitorConfig
+	result             *MonitorResult
+	client             *http.Client
+	ctx                context.Context
+	cancel             context.CancelFunc
+	mu                 sync.Mutex
+	lastOnlineTime     time.Time
 	currentOnlineStart time.Time
-	wsConn          *websocket.Conn
-	wsDialer        *websocket.Dialer
+	wsConn             *websocket.Conn
+	wsDialer           *websocket.Dialer
 	// 数据包统计字段
 	dataPacketCount    int64     // 接收到的数据包总数
 	lastDataPacketTime time.Time // 最后一个数据包的时间
@@ -145,11 +145,11 @@ func (s *MonitorSession) Run(statusChan chan<- *MonitorStatus) *MonitorResult {
 		case <-ticker.C:
 			// 执行心跳检测
 			isAlive, err := s.heartbeat()
-			
+
 			s.mu.Lock()
 			if isAlive {
 				if !s.result.IsAlive {
-					// 从断线恢复
+					// 从断线恢复或首次连接
 					s.result.IsAlive = true
 					s.currentOnlineStart = time.Now()
 					if currentDisconnect != nil {
@@ -160,9 +160,11 @@ func (s *MonitorSession) Run(statusChan chan<- *MonitorStatus) *MonitorResult {
 					}
 				}
 				// 更新最长在线时间
-				currentOnlineTime := time.Since(s.currentOnlineStart)
-				if currentOnlineTime > maxOnlineTime {
-					maxOnlineTime = currentOnlineTime
+				if !s.currentOnlineStart.IsZero() {
+					currentOnlineTime := time.Since(s.currentOnlineStart)
+					if currentOnlineTime > maxOnlineTime {
+						maxOnlineTime = currentOnlineTime
+					}
 				}
 			} else {
 				if s.result.IsAlive {
@@ -181,11 +183,16 @@ func (s *MonitorSession) Run(statusChan chan<- *MonitorStatus) *MonitorResult {
 
 			// 发送状态更新
 			s.mu.Lock()
+			// 计算在线时长（避免死锁）
+			onlineDuration := s.result.OnlineDuration
+			if s.result.IsAlive {
+				onlineDuration += time.Since(s.currentOnlineStart)
+			}
 			status := &MonitorStatus{
 				ProxyName:       s.proxyName,
 				IsAlive:         isAlive,
 				DisconnectCount: s.result.DisconnectCount,
-				OnlineDuration:  s.getOnlineDuration(),
+				OnlineDuration:  onlineDuration,
 				TotalDuration:   time.Since(s.result.StartTime),
 				// WebSocket流式数据统计
 				DataPacketCount: s.dataPacketCount,
@@ -193,11 +200,11 @@ func (s *MonitorSession) Run(statusChan chan<- *MonitorStatus) *MonitorResult {
 				LastPacketTime:  s.lastDataPacketTime,
 			}
 			s.mu.Unlock()
-			
+
 			select {
 			case statusChan <- status:
 			default:
-				// 防止阻塞
+				// 状态发送被跳过（防阻塞）
 			}
 		}
 	}
@@ -248,7 +255,7 @@ func (s *MonitorSession) heartbeatWebSocket() (bool, error) {
 
 	// 设置读取超时 - 10秒内必须收到数据包，否则视为断线
 	s.wsConn.SetReadDeadline(time.Now().Add(10 * time.Second))
-	
+
 	// 读取实时数据包（Binance价格数据）
 	_, message, err := s.wsConn.ReadMessage()
 	if err != nil {
@@ -259,7 +266,7 @@ func (s *MonitorSession) heartbeatWebSocket() (bool, error) {
 
 	// 记录数据包接收统计
 	s.recordDataPacket(message)
-	
+
 	return true, nil
 }
 
@@ -305,12 +312,12 @@ func (s *MonitorSession) closeWebSocket() {
 func (s *MonitorSession) recordDataPacket(message []byte) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	
+
 	now := time.Now()
 	s.dataPacketCount++
 	s.lastDataPacketTime = now
 	s.totalDataBytes += int64(len(message))
-	
+
 	// 可选：记录详细的数据包信息用于调试
 	// 注意：Binance返回的是JSON格式的价格数据，格式如：
 	// {"e":"24hrTicker","E":1640995200000,"s":"BTCUSDT","p":"1000.00",...}
@@ -320,7 +327,7 @@ func (s *MonitorSession) recordDataPacket(message []byte) {
 func (s *MonitorSession) getOnlineDuration() time.Duration {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	
+
 	onlineDuration := s.result.OnlineDuration
 	if s.result.IsAlive {
 		onlineDuration += time.Since(s.currentOnlineStart)
@@ -334,7 +341,7 @@ func (s *MonitorSession) calculateStability() {
 	if s.result.IsAlive {
 		s.result.OnlineDuration += time.Since(s.currentOnlineStart)
 	}
-	
+
 	if s.result.TotalDuration > 0 {
 		s.result.StabilityRate = float64(s.result.OnlineDuration) / float64(s.result.TotalDuration) * 100
 	}
