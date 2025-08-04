@@ -1,54 +1,33 @@
 <template>
   <div class="flex h-full">
-    <!-- 左侧控制面板 -->
-    <div class="w-80 bg-gray-800 border-r border-gray-700 p-4 overflow-y-auto">
-      <div class="space-y-4">
-        <!-- 操作按钮组 -->
-        <div class="space-y-3">
-          <button
-            @click="startTest"
-            :disabled="!configInfo || isRunning"
-            class="btn btn-success w-full"
-          >
-            <span v-if="!isRunning" class="flex items-center justify-center space-x-2">
-              <span>🚀</span>
-              <span>开始测试</span>
-            </span>
-            <span v-else class="flex items-center justify-center space-x-2">
-              <svg class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
-              <span>测试中...</span>
-            </span>
-          </button>
-          
-          <button
-            @click="stopTest"
-            :disabled="!isRunning"
-            class="btn btn-danger w-full"
-          >
-            ⏹ 停止测试
-          </button>
-        </div>
-
+    <!-- 左侧配置面板 -->
+    <div class="w-80 bg-gray-800 border-r border-gray-700 p-6 overflow-y-auto">
+      <div class="space-y-6">
         <!-- 测速服务器 -->
         <div class="card">
           <div class="card-header">
-            <h3 class="text-sm font-semibold text-white">测速服务器</h3>
+            <h3 class="text-lg font-semibold text-white">📊 测速服务器</h3>
           </div>
-          <div class="card-body space-y-3">
-            <label class="flex items-center space-x-2">
+          <div class="card-body space-y-4">
+            <label class="flex items-center space-x-3">
               <input type="radio" v-model="testConfig.serverURL" value="https://speed.cloudflare.com" class="text-primary-500" />
-              <span class="text-sm">Cloudflare (推荐)</span>
+              <span class="text-sm text-gray-300">Cloudflare (推荐)</span>
             </label>
-            <label class="flex items-center space-x-2">
-              <input type="radio" v-model="testConfig.serverURL" value="https://fast.com" class="text-primary-500" />
-              <span class="text-sm">Fast.com</span>
+            <label class="flex items-center space-x-3">
+              <input type="radio" v-model="testConfig.serverURL" value="https://proof.ovh.net/files/100Mb.dat" class="text-primary-500" />
+              <span class="text-sm text-gray-300">OVH (100MB)</span>
             </label>
-            <label class="flex items-center space-x-2">
+            <label class="flex items-center space-x-3">
+              <input type="radio" v-model="testConfig.serverURL" value="http://speedtest.tele2.net/100MB.zip" class="text-primary-500" />
+              <span class="text-sm text-gray-300">Tele2 (100MB)</span>
+            </label>
+            <label class="flex items-center space-x-3">
+              <input type="radio" v-model="testConfig.serverURL" value="https://ash-speed.hetzner.com/100MB.bin" class="text-primary-500" />
+              <span class="text-sm text-gray-300">Hetzner (100MB)</span>
+            </label>
+            <label class="flex items-center space-x-3">
               <input type="radio" v-model="testConfig.serverURL" value="custom" class="text-primary-500" />
-              <span class="text-sm">自定义</span>
+              <span class="text-sm text-gray-300">自定义</span>
             </label>
             <input
               v-if="testConfig.serverURL === 'custom'"
@@ -63,11 +42,11 @@
         <!-- 测试参数 -->
         <div class="card">
           <div class="card-header">
-            <h3 class="text-sm font-semibold text-white">测试参数</h3>
+            <h3 class="text-lg font-semibold text-white">⚙️ 测试参数</h3>
           </div>
-          <div class="card-body space-y-3">
+          <div class="card-body space-y-4">
             <div>
-              <label class="block text-xs font-medium text-gray-400 mb-1">下载大小 (MB)</label>
+              <label class="block text-sm font-medium text-gray-300 mb-2">下载大小 (MB)</label>
               <input
                 v-model.number="downloadSizeMB"
                 type="number"
@@ -78,7 +57,7 @@
             </div>
             
             <div>
-              <label class="block text-xs font-medium text-gray-400 mb-1">上传大小 (MB)</label>
+              <label class="block text-sm font-medium text-gray-300 mb-2">上传大小 (MB)</label>
               <input
                 v-model.number="uploadSizeMB"
                 type="number"
@@ -89,7 +68,7 @@
             </div>
             
             <div>
-              <label class="block text-xs font-medium text-gray-400 mb-1">超时时间 (秒)</label>
+              <label class="block text-sm font-medium text-gray-300 mb-2">超时时间 (秒)</label>
               <input
                 v-model.number="testConfig.timeout"
                 type="number"
@@ -100,7 +79,7 @@
             </div>
             
             <div>
-              <label class="block text-xs font-medium text-gray-400 mb-1">并发数</label>
+              <label class="block text-sm font-medium text-gray-300 mb-2">并发数</label>
               <div class="relative">
                 <input
                   v-model.number="testConfig.concurrent"
@@ -117,72 +96,83 @@
               </div>
             </div>
             
-            <div class="flex items-center space-x-2 pt-2">
+            <div class="flex items-center space-x-3 pt-2">
               <input
                 v-model="testConfig.fastMode"
                 type="checkbox"
                 id="fastMode"
                 class="w-4 h-4 text-primary-600 rounded focus:ring-primary-500"
               />
-              <label for="fastMode" class="text-sm text-gray-300">仅测延迟 (快速模式)</label>
+              <label for="fastMode" class="text-sm text-gray-300">☑ 快速模式 (仅测延迟)</label>
             </div>
           </div>
         </div>
 
-        <!-- 过滤条件 -->
-        <div class="card">
+        <!-- 测试统计 -->
+        <div v-if="testProgress.total > 0 || testResults.length > 0" class="card">
           <div class="card-header">
-            <h3 class="text-sm font-semibold text-white">过滤条件</h3>
+            <h3 class="text-lg font-semibold text-white">📈 测试统计</h3>
           </div>
           <div class="card-body space-y-3">
-            <div>
-              <label class="block text-xs font-medium text-gray-400 mb-1">最大延迟 (ms)</label>
-              <input
-                v-model.number="testConfig.maxLatency"
-                type="number"
-                class="input w-full"
-                min="100"
-                max="5000"
-              />
+            <div class="flex justify-between">
+              <span class="text-gray-300">总节点数:</span>
+              <span class="text-white font-medium">{{ testProgress.total || testResults.length }}</span>
             </div>
-            
-            <div>
-              <label class="block text-xs font-medium text-gray-400 mb-1">最小下载速度 (MB/s)</label>
-              <input
-                v-model.number="testConfig.minDownloadSpeed"
-                type="number"
-                class="input w-full"
-                min="0"
-                max="1000"
-                step="0.1"
-              />
+            <div class="flex justify-between" v-if="testProgress.total > 0">
+              <span class="text-gray-300">已测试:</span>
+              <span class="text-blue-400 font-medium">{{ testProgress.current }}</span>
             </div>
-            
-            <div>
-              <label class="block text-xs font-medium text-gray-400 mb-1">最小上传速度 (MB/s)</label>
-              <input
-                v-model.number="testConfig.minUploadSpeed"
-                type="number"
-                class="input w-full"
-                min="0"
-                max="100"
-                step="0.1"
-              />
+            <div class="flex justify-between" v-if="testResults.length > 0">
+              <span class="text-gray-300">合格节点:</span>
+              <span class="text-green-400 font-medium">{{ passedCount }}</span>
+            </div>
+            <div class="flex justify-between" v-if="testResults.length > 0">
+              <span class="text-gray-300">平均延迟:</span>
+              <span class="text-white font-medium">{{ avgLatency }}ms</span>
+            </div>
+            <div class="flex justify-between" v-if="testProgress.total > 0">
+              <span class="text-gray-300">进度:</span>
+              <span class="text-white font-medium">{{ Math.round(testProgress.current / testProgress.total * 100) }}%</span>
             </div>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- 右侧结果面板 -->
-    <div class="flex-1 flex flex-col bg-gray-900">
-      <!-- 结果区域头部 -->
+    <!-- 右侧测试面板 -->
+    <div class="flex-1 flex flex-col">
+      <!-- 操作栏 -->
       <div class="bg-gray-800 border-b border-gray-700 p-4">
         <div class="flex items-center justify-between">
           <div class="flex items-center space-x-4">
-            <h2 class="text-lg font-semibold text-white">测试结果</h2>
-            <div v-if="testProgress.total > 0" class="flex items-center space-x-3">
-              <div class="text-sm text-gray-400">
+            <button
+              @click="startTest"
+              :disabled="!configInfo || isRunning"
+              class="btn btn-success"
+            >
+              <span v-if="!isRunning" class="flex items-center space-x-2">
+                <span>🚀</span>
+                <span>开始测试</span>
+              </span>
+              <span v-else class="flex items-center space-x-2">
+                <svg class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <span>测试中...</span>
+              </span>
+            </button>
+            
+            <button
+              @click="stopTest"
+              :disabled="!isRunning"
+              class="btn btn-danger"
+            >
+              ⏹ 停止测试
+            </button>
+            
+            <div v-if="testProgress.total > 0" class="flex items-center space-x-3 ml-6">
+              <div class="text-sm text-gray-400 whitespace-nowrap">
                 进度: <span class="text-white font-medium">{{ testProgress.current }} / {{ testProgress.total }}</span>
               </div>
               <div class="w-48 progress-bar">
@@ -296,7 +286,7 @@
 
 <script>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { SaveReport } from '../../wailsjs/go/main/App'
+import { SaveReport, ClearHistory } from '../../wailsjs/go/main/App'
 import { EventsOn, EventsOff } from '../../wailsjs/runtime/runtime'
 
 export default {
@@ -349,6 +339,13 @@ export default {
       }).length
     })
 
+    const avgLatency = computed(() => {
+      const validResults = testResults.value.filter(r => r.status === '完成' && r.latency > 0)
+      if (validResults.length === 0) return 0
+      const totalLatency = validResults.reduce((sum, r) => sum + r.latency, 0)
+      return Math.round(totalLatency / validResults.length)
+    })
+
     // 开始测试
     const startTest = () => {
       if (!props.configInfo) return
@@ -383,10 +380,33 @@ export default {
     }
     
     // 清空结果
-    const clearResults = () => {
-      if (confirm('确定要清空所有测试结果吗？')) {
-        testResults.value = []
-        testProgress.value = { current: 0, total: 0 }
+    const clearResults = async () => {
+      const message = props.isRunning 
+        ? '确定要清空所有测试结果吗？这将停止当前测试并清空历史数据。'
+        : '确定要清空所有测试结果和历史数据吗？'
+        
+      if (confirm(message)) {
+        try {
+          // 如果测试正在进行，先停止测试
+          if (props.isRunning) {
+            emit('stop-test')
+            // 等待一小段时间确保后端处理停止请求
+            await new Promise(resolve => setTimeout(resolve, 500))
+          }
+          
+          // 清空前端数据
+          testResults.value = []
+          testProgress.value = { current: 0, total: 0 }
+          showExportMenu.value = false
+          
+          // 清空后端历史数据
+          await ClearHistory()
+          console.log('历史数据已清空')
+          
+        } catch (error) {
+          console.error('清空失败:', error)
+          alert('清空失败，请重试: ' + error)
+        }
       }
     }
 
@@ -508,6 +528,7 @@ export default {
       testConfig,
       sortedResults,
       passedCount,
+      avgLatency,
       startTest,
       stopTest,
       clearResults,

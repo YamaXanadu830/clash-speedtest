@@ -127,14 +127,6 @@
           />
         </keep-alive>
         
-        <!-- 批量管理页面 -->
-        <keep-alive>
-          <BatchManageView
-            v-if="activeTab === 'batch'"
-            :config-info="configInfo"
-          />
-        </keep-alive>
-        
         <!-- 数据分析页面 -->
         <keep-alive>
           <AnalysisView
@@ -176,7 +168,6 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import ConfigPanel from './components/ConfigPanel.vue'
 import SpeedTestView from './views/SpeedTestView.vue'
 import MonitorView from './views/MonitorView.vue'
-import BatchManageView from './views/BatchManageView.vue'
 import AnalysisView from './views/AnalysisView.vue'
 import SettingsView from './views/SettingsView.vue'
 import { GetSystemInfo, LoadConfig, StartSpeedTest, StartMonitor, StopTest } from '../wailsjs/go/main/App'
@@ -188,7 +179,6 @@ export default {
     ConfigPanel,
     SpeedTestView,
     MonitorView,
-    BatchManageView,
     AnalysisView,
     SettingsView
   },
@@ -225,7 +215,6 @@ export default {
     const tabs = ref([
       { id: 'speedtest', name: '速度测试', icon: '🚀' },
       { id: 'monitor', name: '稳定监控', icon: '📡' },
-      { id: 'batch', name: '批量管理', icon: '📦', badge: null },
       { id: 'analysis', name: '数据分析', icon: '📊' },
       { id: 'settings', name: '设置', icon: '⚙️' }
     ])

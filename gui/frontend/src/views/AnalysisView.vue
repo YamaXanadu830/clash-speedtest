@@ -2,9 +2,30 @@
   <div class="flex flex-col h-full p-6">
     <div class="max-w-7xl mx-auto w-full">
       <!-- 页面标题 -->
-      <div class="mb-6">
-        <h1 class="text-2xl font-bold text-white mb-2">📊 数据分析</h1>
-        <p class="text-gray-400">查看历史测试数据，分析节点性能趋势</p>
+      <div class="mb-6 flex justify-between items-center">
+        <div>
+          <h1 class="text-2xl font-bold text-white mb-2">📊 数据分析</h1>
+          <p class="text-gray-400">查看历史测试数据，分析节点性能趋势</p>
+        </div>
+        <button
+          @click="fetchStats"
+          :disabled="isLoading"
+          class="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        >
+          <span v-if="isLoading">🔄 刷新中...</span>
+          <span v-else>🔄 刷新数据</span>
+        </button>
+      </div>
+
+      <!-- 错误提示 -->
+      <div v-if="error" class="mb-6 p-4 bg-red-900/50 border border-red-500 rounded-lg">
+        <div class="flex items-center">
+          <span class="text-2xl mr-3">❌</span>
+          <div>
+            <p class="text-red-400 font-medium">数据加载失败</p>
+            <p class="text-red-300 text-sm">{{ error }}</p>
+          </div>
+        </div>
       </div>
 
       <!-- 统计卡片 -->
@@ -13,7 +34,10 @@
           <div class="flex items-center justify-between">
             <div>
               <p class="text-gray-400 text-sm">总测试次数</p>
-              <p class="text-2xl font-bold text-white mt-1">{{ stats.totalTests }}</p>
+              <p class="text-2xl font-bold text-white mt-1">
+                <span v-if="isLoading">--</span>
+                <span v-else>{{ stats.totalTests }}</span>
+              </p>
             </div>
             <div class="text-3xl">📈</div>
           </div>
@@ -23,7 +47,10 @@
           <div class="flex items-center justify-between">
             <div>
               <p class="text-gray-400 text-sm">测试节点数</p>
-              <p class="text-2xl font-bold text-white mt-1">{{ stats.totalNodes }}</p>
+              <p class="text-2xl font-bold text-white mt-1">
+                <span v-if="isLoading">--</span>
+                <span v-else>{{ stats.totalNodes }}</span>
+              </p>
             </div>
             <div class="text-3xl">🌐</div>
           </div>
@@ -33,7 +60,10 @@
           <div class="flex items-center justify-between">
             <div>
               <p class="text-gray-400 text-sm">平均延迟</p>
-              <p class="text-2xl font-bold text-green-400 mt-1">{{ stats.avgLatency }}ms</p>
+              <p class="text-2xl font-bold text-green-400 mt-1">
+                <span v-if="isLoading">--</span>
+                <span v-else>{{ stats.avgLatency }}ms</span>
+              </p>
             </div>
             <div class="text-3xl">⚡</div>
           </div>
@@ -43,28 +73,12 @@
           <div class="flex items-center justify-between">
             <div>
               <p class="text-gray-400 text-sm">平均速度</p>
-              <p class="text-2xl font-bold text-blue-400 mt-1">{{ stats.avgSpeed }}MB/s</p>
+              <p class="text-2xl font-bold text-blue-400 mt-1">
+                <span v-if="isLoading">--</span>
+                <span v-else>{{ stats.avgSpeed }}MB/s</span>
+              </p>
             </div>
             <div class="text-3xl">🚀</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 图表区域 -->
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-        <!-- 延迟分布图 -->
-        <div class="bg-gray-800 rounded-lg p-6 border border-gray-700">
-          <h3 class="text-lg font-semibold text-white mb-4">延迟分布</h3>
-          <div class="h-64 flex items-center justify-center">
-            <p class="text-gray-500">图表占位区域</p>
-          </div>
-        </div>
-        
-        <!-- 速度趋势图 -->
-        <div class="bg-gray-800 rounded-lg p-6 border border-gray-700">
-          <h3 class="text-lg font-semibold text-white mb-4">速度趋势</h3>
-          <div class="h-64 flex items-center justify-center">
-            <p class="text-gray-500">图表占位区域</p>
           </div>
         </div>
       </div>
@@ -122,7 +136,8 @@
 </template>
 
 <script>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
+import { GetAnalysisStats } from '../../wailsjs/go/main/App'
 
 export default {
   name: 'AnalysisView',
@@ -133,10 +148,40 @@ export default {
     const selectedMetric = ref('latency')
     
     const stats = ref({
-      totalTests: 1234,
-      totalNodes: 567,
-      avgLatency: 45,
-      avgSpeed: 32.5
+      totalTests: 0,
+      totalNodes: 0,
+      avgLatency: 0,
+      avgSpeed: 0
+    })
+    
+    const isLoading = ref(true)
+    const error = ref(null)
+    
+    // 获取统计数据
+    const fetchStats = async () => {
+      try {
+        isLoading.value = true
+        error.value = null
+        const result = await GetAnalysisStats()
+        if (result) {
+          stats.value = {
+            totalTests: result.totalTests || 0,
+            totalNodes: result.totalNodes || 0,
+            avgLatency: Math.round(result.avgLatency) || 0,
+            avgSpeed: (result.avgSpeed || 0).toFixed(1)
+          }
+        }
+      } catch (err) {
+        console.error('获取统计数据失败:', err)
+        error.value = '获取统计数据失败'
+      } finally {
+        isLoading.value = false
+      }
+    }
+    
+    // 组件挂载时获取数据
+    onMounted(() => {
+      fetchStats()
     })
     
     const metrics = ref([
@@ -160,6 +205,9 @@ export default {
     return {
       selectedMetric,
       stats,
+      isLoading,
+      error,
+      fetchStats,
       metrics,
       topNodes
     }

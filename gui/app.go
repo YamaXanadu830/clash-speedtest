@@ -5,17 +5,22 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
+	"runtime"
+	"sync"
 	"time"
 
 	"github.com/YamaXanadu830/clash-speedtest/speedtester"
-	"github.com/wailsapp/wails/v2/pkg/runtime"
+	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // App 应用结构体
 type App struct {
-	ctx         context.Context
-	speedTester *speedtester.SpeedTester
-	isRunning   bool
+	ctx            context.Context
+	speedTester    *speedtester.SpeedTester
+	isRunning      bool
+	cancelTest     context.CancelFunc
+	historyManager *HistoryManager
 }
 
 // NewApp 创建新的应用实例
@@ -26,6 +31,11 @@ func NewApp() *App {
 // OnStartup 应用启动时调用
 func (a *App) OnStartup(ctx context.Context) {
 	a.ctx = ctx
+	
+	// 初始化历史数据管理器
+	homeDir, _ := os.UserHomeDir()
+	dataFile := filepath.Join(homeDir, ".clash-speedtest", "history.json")
+	a.historyManager = NewHistoryManager(dataFile)
 }
 
 // OnDomReady DOM准备好时调用
@@ -87,9 +97,17 @@ func (a *App) StartSpeedTest(config TestConfig) error {
 
 	a.isRunning = true
 	
+	// 创建可取消的上下文
+	testCtx, cancel := context.WithCancel(a.ctx)
+	a.cancelTest = cancel
+	
 	go func() {
 		defer func() {
-			a.isRunning = false
+			// 只有在正常完成时才重置状态（StopTest已经处理了取消的情况）
+			if a.isRunning {
+				a.isRunning = false
+				a.cancelTest = nil
+			}
 		}()
 
 		// 更新配置
@@ -108,20 +126,43 @@ func (a *App) StartSpeedTest(config TestConfig) error {
 			FastMode:         config.FastMode,
 		})
 
+		// 检查是否已被取消
+		select {
+		case <-testCtx.Done():
+			wailsruntime.EventsEmit(a.ctx, "test-stopped", nil)
+			return
+		default:
+		}
+
 		proxies, err := a.speedTester.LoadProxies(false)
 		if err != nil {
-			runtime.EventsEmit(a.ctx, "test-error", fmt.Sprintf("加载代理失败: %v", err))
+			wailsruntime.EventsEmit(a.ctx, "test-error", fmt.Sprintf("加载代理失败: %v", err))
 			return
 		}
 
+		// 再次检查是否已被取消
+		select {
+		case <-testCtx.Done():
+			wailsruntime.EventsEmit(a.ctx, "test-stopped", nil)
+			return
+		default:
+		}
+
 		// 发送测试开始事件
-		runtime.EventsEmit(a.ctx, "test-start", map[string]interface{}{
+		wailsruntime.EventsEmit(a.ctx, "test-start", map[string]interface{}{
 			"total": len(proxies),
 		})
 
 		var results []*speedtester.Result
 		
 		a.speedTester.TestProxies(proxies, func(result *speedtester.Result) {
+			// 在每个结果回调中检查取消状态
+			select {
+			case <-testCtx.Done():
+				return
+			default:
+			}
+			
 			results = append(results, result)
 			
 			// 转换结果格式并发送进度事件
@@ -140,15 +181,32 @@ func (a *App) StartSpeedTest(config TestConfig) error {
 				Status:        "完成",
 			}
 			
-			runtime.EventsEmit(a.ctx, "test-progress", map[string]interface{}{
+			// 异步保存到历史记录，避免阻塞测试进程
+			if a.historyManager != nil {
+				go func(result *TestResult) {
+					if err := a.historyManager.AddResult(result); err != nil {
+						fmt.Printf("保存测试结果到历史记录失败: %v\n", err)
+					}
+				}(guiResult)
+			}
+			
+			wailsruntime.EventsEmit(a.ctx, "test-progress", map[string]interface{}{
 				"current": len(results),
 				"total":   len(proxies),
 				"result":  guiResult,
 			})
 		})
 
+		// 最后检查是否已被取消
+		select {
+		case <-testCtx.Done():
+			wailsruntime.EventsEmit(a.ctx, "test-stopped", nil)
+			return
+		default:
+		}
+
 		// 发送测试完成事件
-		runtime.EventsEmit(a.ctx, "test-complete", map[string]interface{}{
+		wailsruntime.EventsEmit(a.ctx, "test-complete", map[string]interface{}{
 			"results": results,
 			"total":   len(results),
 		})
@@ -169,14 +227,30 @@ func (a *App) StartMonitor(config MonitorConfig) error {
 
 	a.isRunning = true
 
+	// 创建可取消的上下文
+	monitorCtx, cancel := context.WithCancel(a.ctx)
+	a.cancelTest = cancel
+
 	go func() {
 		defer func() {
-			a.isRunning = false
+			// 只有在正常完成时才重置状态（StopTest已经处理了取消的情况）
+			if a.isRunning {
+				a.isRunning = false
+				a.cancelTest = nil
+			}
 		}()
+
+		// 检查是否已被取消
+		select {
+		case <-monitorCtx.Done():
+			wailsruntime.EventsEmit(a.ctx, "test-stopped", nil)
+			return
+		default:
+		}
 
 		proxies, err := a.speedTester.LoadProxies(false)
 		if err != nil {
-			runtime.EventsEmit(a.ctx, "monitor-error", fmt.Sprintf("加载代理失败: %v", err))
+			wailsruntime.EventsEmit(a.ctx, "monitor-error", fmt.Sprintf("加载代理失败: %v", err))
 			return
 		}
 
@@ -198,7 +272,7 @@ func (a *App) StartMonitor(config MonitorConfig) error {
 		}
 
 		// 发送监控开始事件
-		runtime.EventsEmit(a.ctx, "monitor-start", map[string]interface{}{
+		wailsruntime.EventsEmit(a.ctx, "monitor-start", map[string]interface{}{
 			"total":    len(proxies),
 			"duration": config.Duration,
 			"type":     config.Type,
@@ -206,7 +280,7 @@ func (a *App) StartMonitor(config MonitorConfig) error {
 
 		statusMap := make(map[string]*speedtester.MonitorStatus)
 		
-		results := a.speedTester.MonitorProxies(proxies, monitorConfig, func(status *speedtester.MonitorStatus) {
+		results := a.speedTester.MonitorProxiesWithContext(monitorCtx, proxies, monitorConfig, func(status *speedtester.MonitorStatus) {
 			statusMap[status.ProxyName] = status
 			
 			// 转换状态格式并发送更新事件
@@ -222,11 +296,19 @@ func (a *App) StartMonitor(config MonitorConfig) error {
 				LastUpdate:      time.Now().Format("15:04:05"),
 			}
 			
-			runtime.EventsEmit(a.ctx, "monitor-update", guiStatus)
+			wailsruntime.EventsEmit(a.ctx, "monitor-update", guiStatus)
 		})
 
+		// 最后检查是否已被取消
+		select {
+		case <-monitorCtx.Done():
+			wailsruntime.EventsEmit(a.ctx, "test-stopped", nil)
+			return
+		default:
+		}
+
 		// 发送监控完成事件
-		runtime.EventsEmit(a.ctx, "monitor-complete", map[string]interface{}{
+		wailsruntime.EventsEmit(a.ctx, "monitor-complete", map[string]interface{}{
 			"results": results,
 			"total":   len(results),
 		})
@@ -241,25 +323,50 @@ func (a *App) StopTest() error {
 		return fmt.Errorf("没有正在运行的测试")
 	}
 	
-	// 这里可以添加停止逻辑
-	a.isRunning = false
-	runtime.EventsEmit(a.ctx, "test-stopped", nil)
+	// 调用取消函数停止goroutine
+	if a.cancelTest != nil {
+		a.cancelTest()
+		// 立即重置运行状态，确保可以立即开始新的测试
+		a.isRunning = false
+		a.cancelTest = nil
+	}
 	
 	return nil
 }
 
 // GetSystemInfo 获取系统信息
 func (a *App) GetSystemInfo() *SystemInfo {
+	// 获取操作系统和架构信息
+	platform := fmt.Sprintf("%s/%s", runtime.GOOS, runtime.GOARCH)
+	
 	return &SystemInfo{
-		Platform: "unknown", // 可以使用runtime包获取实际平台信息
-		Version:  "1.0.0",
+		Platform:  platform,
+		Version:   "1.0.0",
 		BuildTime: time.Now().Format("2006-01-02 15:04:05"),
 	}
 }
 
+// GetAnalysisStats 获取分析统计数据
+func (a *App) GetAnalysisStats() (*AnalysisStats, error) {
+	if a.historyManager == nil {
+		return nil, fmt.Errorf("历史数据管理器未初始化")
+	}
+	
+	return a.historyManager.GetStats(), nil
+}
+
+// ClearHistory 清空历史数据
+func (a *App) ClearHistory() error {
+	if a.historyManager == nil {
+		return fmt.Errorf("历史数据管理器未初始化")
+	}
+	
+	return a.historyManager.ClearHistory()
+}
+
 // SelectConfigFile 选择配置文件
 func (a *App) SelectConfigFile() (string, error) {
-	filters := []runtime.FileFilter{
+	filters := []wailsruntime.FileFilter{
 		{
 			DisplayName: "YAML配置文件 (*.yaml, *.yml)",
 			Pattern:     "*.yaml;*.yml",
@@ -270,18 +377,18 @@ func (a *App) SelectConfigFile() (string, error) {
 		},
 	}
 	
-	options := runtime.OpenDialogOptions{
+	options := wailsruntime.OpenDialogOptions{
 		Title:   "选择Clash配置文件",
 		Filters: filters,
 	}
 	
-	selectedFile, err := runtime.OpenFileDialog(a.ctx, options)
+	selectedFile, err := wailsruntime.OpenFileDialog(a.ctx, options)
 	return selectedFile, err
 }
 
 // SaveReport 保存测试报告
 func (a *App) SaveReport(results interface{}, format string) error {
-	filters := []runtime.FileFilter{
+	filters := []wailsruntime.FileFilter{
 		{
 			DisplayName: "YAML文件 (*.yaml)",
 			Pattern:     "*.yaml",
@@ -292,13 +399,13 @@ func (a *App) SaveReport(results interface{}, format string) error {
 		},
 	}
 	
-	options := runtime.SaveDialogOptions{
+	options := wailsruntime.SaveDialogOptions{
 		Title:          "保存测试报告",
 		Filters:        filters,
 		DefaultFilename: fmt.Sprintf("speedtest-report-%s", time.Now().Format("20060102-150405")),
 	}
 	
-	selectedFile, err := runtime.SaveFileDialog(a.ctx, options)
+	selectedFile, err := wailsruntime.SaveFileDialog(a.ctx, options)
 	if err != nil {
 		return err
 	}
@@ -320,6 +427,28 @@ func (a *App) SaveReport(results interface{}, format string) error {
 }
 
 // 数据结构定义
+
+// HistoryManager 历史数据管理器
+type HistoryManager struct {
+	dataFile string
+	history  []HistoricalTestResult
+	mutex    sync.RWMutex
+}
+
+// HistoricalTestResult 历史测试结果（包含时间戳）
+type HistoricalTestResult struct {
+	TestResult
+	Timestamp time.Time `json:"timestamp"`
+}
+
+// AnalysisStats 分析统计数据
+type AnalysisStats struct {
+	TotalTests  int     `json:"totalTests"`
+	TotalNodes  int     `json:"totalNodes"`
+	AvgLatency  float64 `json:"avgLatency"`
+	AvgSpeed    float64 `json:"avgSpeed"`
+	LastUpdated string  `json:"lastUpdated"`
+}
 
 type ConfigInfo struct {
 	ProxyCount int    `json:"proxyCount"`
@@ -381,4 +510,138 @@ type SystemInfo struct {
 	Platform  string `json:"platform"`
 	Version   string `json:"version"`
 	BuildTime string `json:"buildTime"`
+}
+
+// HistoryManager 方法定义
+
+// NewHistoryManager 创建新的历史数据管理器
+func NewHistoryManager(dataFile string) *HistoryManager {
+	hm := &HistoryManager{
+		dataFile: dataFile,
+		history:  make([]HistoricalTestResult, 0),
+	}
+	
+	// 确保目录存在
+	dir := filepath.Dir(dataFile)
+	os.MkdirAll(dir, 0755)
+	
+	// 加载历史数据
+	hm.loadHistory()
+	
+	return hm
+}
+
+// loadHistory 从文件加载历史数据
+func (hm *HistoryManager) loadHistory() {
+	hm.mutex.Lock()
+	defer hm.mutex.Unlock()
+	
+	data, err := os.ReadFile(hm.dataFile)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			fmt.Printf("加载历史数据失败: %v\n", err)
+		}
+		return
+	}
+	
+	if err := json.Unmarshal(data, &hm.history); err != nil {
+		fmt.Printf("解析历史数据失败: %v\n", err)
+		hm.history = make([]HistoricalTestResult, 0)
+	}
+}
+
+// saveHistory 保存历史数据到文件
+func (hm *HistoryManager) saveHistory() error {
+	// 注意：这个方法是在AddResult中调用的，AddResult已经获取了写锁
+	// 所以这里不需要再获取锁
+	
+	data, err := json.MarshalIndent(hm.history, "", "  ")
+	if err != nil {
+		return fmt.Errorf("序列化历史数据失败: %v", err)
+	}
+	
+	return os.WriteFile(hm.dataFile, data, 0644)
+}
+
+// AddResult 添加测试结果到历史记录
+func (hm *HistoryManager) AddResult(result *TestResult) error {
+	hm.mutex.Lock()
+	defer hm.mutex.Unlock()
+	
+	historicalResult := HistoricalTestResult{
+		TestResult: *result,
+		Timestamp:  time.Now(),
+	}
+	
+	hm.history = append(hm.history, historicalResult)
+	
+	return hm.saveHistory()
+}
+
+// GetStats 计算并返回统计数据
+func (hm *HistoryManager) GetStats() *AnalysisStats {
+	hm.mutex.RLock()
+	defer hm.mutex.RUnlock()
+	
+	if len(hm.history) == 0 {
+		return &AnalysisStats{
+			TotalTests:  0,
+			TotalNodes:  0,
+			AvgLatency:  0,
+			AvgSpeed:    0,
+			LastUpdated: time.Now().Format("2006-01-02 15:04:05"),
+		}
+	}
+	
+	// 统计总测试次数
+	totalTests := len(hm.history)
+	
+	// 统计不同节点数
+	nodeSet := make(map[string]bool)
+	var totalLatency int64
+	var totalSpeed float64
+	validLatencyCount := 0
+	validSpeedCount := 0
+	
+	for _, result := range hm.history {
+		nodeSet[result.ProxyName] = true
+		
+		if result.Latency > 0 {
+			totalLatency += result.Latency
+			validLatencyCount++
+		}
+		
+		if result.DownloadSpeed > 0 {
+			totalSpeed += result.DownloadSpeed
+			validSpeedCount++
+		}
+	}
+	
+	var avgLatency float64
+	var avgSpeed float64
+	
+	if validLatencyCount > 0 {
+		avgLatency = float64(totalLatency) / float64(validLatencyCount)
+	}
+	
+	if validSpeedCount > 0 {
+		avgSpeed = totalSpeed / float64(validSpeedCount) / 1024 / 1024 // 转换为MB/s
+	}
+	
+	return &AnalysisStats{
+		TotalTests:  totalTests,
+		TotalNodes:  len(nodeSet),
+		AvgLatency:  avgLatency,
+		AvgSpeed:    avgSpeed,
+		LastUpdated: time.Now().Format("2006-01-02 15:04:05"),
+	}
+}
+
+// ClearHistory 清空历史数据
+func (hm *HistoryManager) ClearHistory() error {
+	hm.mutex.Lock()
+	defer hm.mutex.Unlock()
+	
+	hm.history = make([]HistoricalTestResult, 0)
+	return hm.saveHistory()
 }

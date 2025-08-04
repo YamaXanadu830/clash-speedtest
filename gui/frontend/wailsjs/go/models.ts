@@ -1,5 +1,25 @@
 export namespace main {
 	
+	export class AnalysisStats {
+	    totalTests: number;
+	    totalNodes: number;
+	    avgLatency: number;
+	    avgSpeed: number;
+	    lastUpdated: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new AnalysisStats(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.totalTests = source["totalTests"];
+	        this.totalNodes = source["totalNodes"];
+	        this.avgLatency = source["avgLatency"];
+	        this.avgSpeed = source["avgSpeed"];
+	        this.lastUpdated = source["lastUpdated"];
+	    }
+	}
 	export class ConfigInfo {
 	    proxyCount: number;
 	    configPath: string;
