@@ -68,7 +68,11 @@ type MonitorSession struct {
 func (st *SpeedTester) MonitorProxies(proxies map[string]*CProxy, config *MonitorConfig, callback func(status *MonitorStatus)) []*MonitorResult {
 	ctx, cancel := context.WithTimeout(context.Background(), config.Duration)
 	defer cancel()
+	return st.MonitorProxiesWithContext(ctx, proxies, config, callback)
+}
 
+// MonitorProxiesWithContext 监控代理节点稳定性（支持外部context）
+func (st *SpeedTester) MonitorProxiesWithContext(ctx context.Context, proxies map[string]*CProxy, config *MonitorConfig, callback func(status *MonitorStatus)) []*MonitorResult {
 	var wg sync.WaitGroup
 	results := make([]*MonitorResult, 0, len(proxies))
 	resultChan := make(chan *MonitorResult, len(proxies))
@@ -77,7 +81,13 @@ func (st *SpeedTester) MonitorProxies(proxies map[string]*CProxy, config *Monito
 	// 启动状态收集器
 	go func() {
 		for status := range statusChan {
-			callback(status)
+			// 检查context是否已取消
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				callback(status)
+			}
 		}
 	}()
 
@@ -95,7 +105,13 @@ func (st *SpeedTester) MonitorProxies(proxies map[string]*CProxy, config *Monito
 				ctx:       ctx,
 			}
 			result := session.Run(statusChan)
-			resultChan <- result
+			
+			// 检查context是否已取消
+			select {
+			case <-ctx.Done():
+				return
+			case resultChan <- result:
+			}
 		}(name, proxy)
 	}
 
